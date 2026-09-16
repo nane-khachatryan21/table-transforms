@@ -1,0 +1,1661 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Table Studio</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: { extend: { fontFamily: { sans: ["Inter", "ui-sans-serif", "system-ui", "sans-serif"] } } },
+    };
+  </script>
+  <script crossorigin src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.25.6/babel.min.js"></script>
+  <link rel="stylesheet" href="https://unpkg.com/ag-grid-community@31.3.4/styles/ag-grid.css" />
+  <link rel="stylesheet" href="https://unpkg.com/ag-grid-community@31.3.4/styles/ag-theme-quartz.css" />
+  <script src="https://unpkg.com/ag-grid-community@31.3.4/dist/ag-grid-community.min.js"></script>
+  <style>
+    html, body, #root { height: 100%; margin: 0; overflow: hidden; }
+    body { font-family: Inter, ui-sans-serif, system-ui, sans-serif; background: #f3f5f8; color: #0f172a; }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-thumb { background: rgba(15, 23, 42, .18); border-radius: 4px; }
+    .image-stage {
+      position: relative; overflow: hidden; user-select: none; touch-action: none; cursor: grab;
+      background:
+        linear-gradient(45deg, rgba(15,23,42,.05) 25%, transparent 25%),
+        linear-gradient(-45deg, rgba(15,23,42,.05) 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, rgba(15,23,42,.05) 75%),
+        linear-gradient(-45deg, transparent 75%, rgba(15,23,42,.05) 75%);
+      background-size: 18px 18px; background-position: 0 0, 0 9px, 9px -9px, -9px 0;
+    }
+    .image-stage.panning { cursor: grabbing; }
+    .image-stage img { position: absolute; left: 0; top: 0; transform-origin: 0 0; max-width: none; pointer-events: none; }
+    .tree-cell { display: flex; align-items: center; gap: 4px; }
+    .tree-cell .chevron { flex: 0 0 14px; width: 14px; height: 14px; opacity: .45; }
+    .tree-cell .chevron.has { opacity: 1; }
+    .tree-cell-text { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+    .col-focused { background: rgba(37, 99, 235, 0.08) !important; }
+    .ag-header-cell.col-header-focused { background: rgba(37, 99, 235, 0.15) !important; }
+    .ag-theme-quartz {
+      --ag-font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+      --ag-font-size: 12px;
+      --ag-header-background-color: #f8fafc;
+      --ag-border-color: #e2e8f0;
+      --ag-row-hover-color: #eff6ff;
+      --ag-selected-row-background-color: #dbeafe;
+      --ag-header-foreground-color: #334155;
+      --ag-range-selection-border-color: #2563eb;
+    }
+    .divider {
+      flex: 0 0 6px; background: transparent; cursor: col-resize; position: relative;
+      transition: background-color 150ms;
+    }
+    .divider.vert { cursor: row-resize; }
+    .divider:hover, .divider.dragging { background: rgb(37 99 235 / 0.28); }
+    .divider::after {
+      content: ""; position: absolute; inset: 0; background: #e2e8f0;
+      width: 1px; margin: 0 auto;
+    }
+    .divider.vert::after { width: 100%; height: 1px; margin: auto 0; }
+    .tab { padding: 7px 12px; font-size: 13px; border-bottom: 2px solid transparent; color: #64748b; }
+    .tab.active { color: #0f172a; border-bottom-color: #2563eb; font-weight: 500; }
+    .file-item { cursor: pointer; border-left: 2px solid transparent; }
+    .file-item.active { background: #eff6ff; border-left-color: #2563eb; }
+    .tool-btn { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; padding: 6px 8px; border-radius: 8px; font-size: 13px; color: #334155; }
+    .tool-btn:hover { background: #f1f5f9; }
+    .tool-btn.active { background: #eff6ff; color: #1d4ed8; }
+    .tool-btn:disabled { opacity: .4; cursor: not-allowed; }
+    .btn { display: inline-flex; align-items: center; gap: 5px; padding: 6px 9px; border-radius: 8px; font-size: 12.5px; font-weight: 500; border: 1px solid transparent; white-space: nowrap; }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+    .btn.ghost { border-color: #e2e8f0; background: white; color: #334155; }
+    .btn.ghost:hover { background: #f8fafc; }
+    .btn.primary { background: #2563eb; color: white; }
+    .btn.primary:hover { background: #1d4ed8; }
+    .btn.danger { color: #b91c1c; }
+    .btn.danger:hover { background: #fef2f2; }
+    .btn.icon { padding: 6px; }
+    .chip { font-size: 11px; padding: 2px 8px; border-radius: 999px; background: #e2e8f0; color: #334155; }
+    .chip.ok { background: #dcfce7; color: #166534; }
+    .chip.warn { background: #fef3c7; color: #92400e; }
+    .chip.err { background: #fee2e2; color: #991b1b; }
+    .chip.blue { background: #dbeafe; color: #1d4ed8; }
+    .field { width: 100%; border: 1px solid #e2e8f0; border-radius: 8px; padding: 6px 8px; font-size: 12px; background: white; }
+    .field:focus { outline: 2px solid #bfdbfe; border-color: #2563eb; }
+    .drop { border: 1.5px dashed #cbd5e1; border-radius: 12px; padding: 18px; background: #f8fafc; text-align: center; }
+    .drop.over { border-color: #2563eb; background: #eff6ff; }
+    .sep { width: 1px; height: 18px; background: #e2e8f0; margin: 0 4px; flex: none; }
+    .kbd { font-size: 10px; padding: 1px 5px; border: 1px solid #e2e8f0; border-bottom-width: 2px; border-radius: 4px; background: white; color: #64748b; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .rail-btn { width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; border-radius: 8px; color: #475569; }
+    .rail-btn:hover { background: #f1f5f9; }
+    .rail-btn.active { background: #eff6ff; color: #1d4ed8; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="text/babel" data-presets="react">
+const { useState, useEffect, useRef, useCallback, useMemo } = React;
+
+const clone = (v) => JSON.parse(JSON.stringify(v));
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+const basename = (p) => String(p || "").split(/[\\/]/).pop();
+const pathKey = (p) => (p || []).join(".");
+const emptyRow = (w) => ({ row_data: Array(Math.max(1, w)).fill(""), children: [] });
+const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch { return d; } };
+const lsSet = (k, v) => { try { localStorage.setItem(k, String(v)); } catch {} };
+function isTypingTarget(el) {
+  if (!el || !el.closest) return false;
+  const tag = (el.tagName || "").toLowerCase();
+  if (tag === "input" || tag === "textarea" || tag === "select") return true;
+  if (el.isContentEditable) return true;
+  return !!el.closest(".ag-large-text, .ag-text-area-input, .field, [contenteditable='true']");
+}
+function gridIsEditing(api) {
+  try { return !!(api && api.getEditingCells && api.getEditingCells().length); } catch { return false; }
+}
+
+function flattenBody(body) {
+  const out = [];
+  const walk = (rows, depth, prefix) => {
+    (rows || []).forEach((row, i) => {
+      const path = [...prefix, i];
+      out.push({
+        id: path.join("."),
+        depth,
+        path,
+        row_data: (row.row_data || []).slice(),
+        hasChildren: Array.isArray(row.children) && row.children.length > 0,
+      });
+      walk(row.children || [], depth + 1, path);
+    });
+  };
+  walk(body || [], 0, []);
+  return out;
+}
+
+function tableWidth(doc) {
+  let w = 0;
+  (doc?.headers || []).forEach((r) => { if (Array.isArray(r)) w = Math.max(w, r.length); });
+  const walk = (rows) => {
+    (rows || []).forEach((r) => {
+      w = Math.max(w, (r.row_data || []).length);
+      walk(r.children || []);
+    });
+  };
+  walk(doc?.body || []);
+  return w;
+}
+
+function previousSibling(flat, path) {
+  const idx = flat.findIndex((r) => r.id === pathKey(path));
+  if (idx <= 0) return null;
+  const depth = flat[idx].depth;
+  let prev = idx - 1;
+  while (prev >= 0 && flat[prev].depth > depth) prev--;
+  if (prev < 0 || flat[prev].depth !== depth) return null;
+  return flat[prev].path;
+}
+
+function siblingCount(flat, path) {
+  const parent = path.slice(0, -1);
+  return flat.filter((r) => r.path.length === path.length && pathKey(r.path.slice(0, -1)) === pathKey(parent)).length;
+}
+
+async function api(path, body, method) {
+  const res = await fetch(path, {
+    method: method || (body === undefined ? "GET" : "POST"),
+    headers: body === undefined ? {} : { "Content-Type": "application/json" },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  if (path === "/api/export.jsonl") {
+    if (!res.ok) throw new Error("Export failed");
+    return res;
+  }
+  const data = await res.json();
+  if (!res.ok || data.ok === false) throw new Error(data.error || res.statusText);
+  return data;
+}
+
+function parseJsonl(text) {
+  const records = [];
+  const errors = [];
+  text.split(/\r?\n/).forEach((line, i) => {
+    const s = line.trim();
+    if (!s) return;
+    try { records.push(JSON.parse(s)); }
+    catch (e) { errors.push(`Line ${i + 1}: ${e.message}`); }
+  });
+  return { records, errors };
+}
+
+const Icon = ({ d, size = 16 }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{d}</svg>
+);
+const I = {
+  table: <Icon d={<><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></>}/>,
+  undo: <Icon d={<><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/></>}/>,
+  redo: <Icon d={<><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 15-6.7L21 13"/></>}/>,
+  history: <Icon d={<><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></>}/>,
+  download: <Icon d={<><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>}/>,
+  plus: <Icon d={<><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></>}/>,
+  trash: <Icon d={<><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></>}/>,
+  copy: <Icon d={<><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></>}/>,
+  indent: <Icon d={<><polyline points="3 8 7 12 3 16"/><line x1="21" y1="12" x2="11" y2="12"/></>}/>,
+  outdent: <Icon d={<><polyline points="7 8 3 12 7 16"/><line x1="21" y1="12" x2="11" y2="12"/></>}/>,
+  up: <Icon d={<polyline points="18 15 12 9 6 15"/>}/>,
+  down: <Icon d={<polyline points="6 9 12 15 18 9"/>}/>,
+  check: <Icon d={<polyline points="20 6 9 17 4 12"/>}/>,
+  x: <Icon d={<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>}/>,
+  alert: <Icon d={<><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12" y2="16"/></>}/>,
+  image: <Icon d={<><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="m21 15-5-5L5 21"/></>}/>,
+  file: <Icon d={<><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></>}/>,
+  child: <Icon d={<><polyline points="15 10 20 15 15 20"/><path d="M4 4v7a4 4 0 0 0 4 4h12"/></>}/>,
+  cols: <Icon d={<><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></>}/>,
+  menu: <Icon d={<><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></>}/>,
+  swap: <Icon d={<><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="8 21 3 21 3 16"/></>}/>,
+  rows: <Icon d={<><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/></>}/>,
+  maximize: <Icon d={<path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>}/>,
+  minimize: <Icon d={<path d="M8 3v3a2 2 0 0 1-2 2H3m18 0h-3a2 2 0 0 1-2-2V3m0 18v-3a2 2 0 0 1 2-2h3M3 16h3a2 2 0 0 1 2 2v3"/>}/>,
+  wrench: <Icon d={<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>}/>,
+  help: <Icon d={<><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></>}/>,
+  minus: <Icon d={<line x1="5" y1="12" x2="19" y2="12"/>}/>,
+};
+
+function ImageViewer({ src, name }) {
+  const stageRef = useRef(null);
+  const imgRef = useRef(null);
+  const [t, setT] = useState({ s: 1, x: 0, y: 0 });
+  const [panning, setPanning] = useState(false);
+  const panStartRef = useRef(null);
+  const initializedSrcRef = useRef(null);
+  const [loaded, setLoaded] = useState(false);
+
+  const fitToStage = useCallback(() => {
+    const stage = stageRef.current, img = imgRef.current;
+    if (!stage || !img || !img.naturalWidth) return;
+    const s = Math.min(stage.clientWidth / img.naturalWidth, stage.clientHeight / img.naturalHeight) * 0.98;
+    setT({ s, x: (stage.clientWidth - img.naturalWidth * s) / 2, y: (stage.clientHeight - img.naturalHeight * s) / 2 });
+  }, []);
+
+  useEffect(() => { initializedSrcRef.current = null; setLoaded(false); }, [src]);
+  const onImgLoad = useCallback(() => {
+    setLoaded(true);
+    if (initializedSrcRef.current !== src) { initializedSrcRef.current = src; fitToStage(); }
+  }, [src, fitToStage]);
+
+  useEffect(() => {
+    const el = stageRef.current;
+    if (!el) return;
+    const handler = (e) => {
+      e.preventDefault();
+      const rect = el.getBoundingClientRect();
+      const mx = e.clientX - rect.left, my = e.clientY - rect.top;
+      setT((prev) => {
+        const next = clamp(prev.s * (1 - e.deltaY * 0.0015), 0.05, 20);
+        if (next === prev.s) return prev;
+        const k = next / prev.s;
+        return { s: next, x: mx - (mx - prev.x) * k, y: my - (my - prev.y) * k };
+      });
+    };
+    el.addEventListener("wheel", handler, { passive: false });
+    return () => el.removeEventListener("wheel", handler);
+  }, []);
+
+  const onMouseDown = (e) => {
+    if (e.button !== 0) return;
+    setPanning(true);
+    panStartRef.current = { sx: e.clientX, sy: e.clientY, ox: t.x, oy: t.y };
+  };
+  useEffect(() => {
+    if (!panning) return;
+    const onMove = (e) => {
+      const s = panStartRef.current;
+      if (s) setT((prev) => ({ ...prev, x: s.ox + (e.clientX - s.sx), y: s.oy + (e.clientY - s.sy) }));
+    };
+    const onUp = () => { setPanning(false); panStartRef.current = null; };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    return () => { document.removeEventListener("mousemove", onMove); document.removeEventListener("mouseup", onUp); };
+  }, [panning]);
+
+  const zoom = (factor) => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const rect = stage.getBoundingClientRect();
+    const mx = rect.width / 2, my = rect.height / 2;
+    setT((prev) => {
+      const next = clamp(prev.s * factor, 0.05, 20);
+      if (next === prev.s) return prev;
+      const k = next / prev.s;
+      return { s: next, x: mx - (mx - prev.x) * k, y: my - (my - prev.y) * k };
+    });
+  };
+
+  return (
+    <div className="h-full flex flex-col bg-white">
+      <div className="flex-none flex items-center justify-between px-3 py-1.5 border-b border-slate-200 text-xs text-slate-500">
+        <div className="truncate">{name || "No image"}</div>
+        <div className="flex items-center gap-1">
+          <span className="chip">{(t.s * 100).toFixed(0)}%</span>
+          <button className="btn ghost icon" title="Zoom in" onClick={() => zoom(1.2)}>{I.plus}</button>
+          <button className="btn ghost icon" title="Zoom out" onClick={() => zoom(1 / 1.2)}>{I.minus}</button>
+          <button className="btn ghost" style={{ padding: "4px 8px" }} onClick={fitToStage}>Fit</button>
+        </div>
+      </div>
+      <div ref={stageRef} className={"image-stage flex-1 " + (panning ? "panning" : "")} onMouseDown={onMouseDown}>
+        {src ? (
+          <img ref={imgRef} src={src} onLoad={onImgLoad} draggable={false}
+               style={{ transform: `translate3d(${t.x}px, ${t.y}px, 0) scale(${t.s})`, visibility: loaded ? "visible" : "hidden" }} />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center text-sm text-slate-400">Upload table images to compare with the source</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AGGrid({ columnDefs, rowData, gridOptions, onReady, style }) {
+  const containerRef = useRef(null);
+  const apiRef = useRef(null);
+  const optsRef = useRef(gridOptions);
+  useEffect(() => { optsRef.current = gridOptions; });
+  useEffect(() => {
+    if (!containerRef.current || apiRef.current || !window.agGrid) return;
+    const callbackKeys = Object.keys(gridOptions || {}).filter((k) => k.startsWith("on") && typeof gridOptions[k] === "function");
+    const trampolines = {};
+    for (const k of callbackKeys) trampolines[k] = (...args) => optsRef.current[k] && optsRef.current[k](...args);
+    try {
+      apiRef.current = window.agGrid.createGrid(containerRef.current, {
+        ...gridOptions, ...trampolines, columnDefs, rowData,
+        onGridReady: (p) => { apiRef.current = p.api; onReady && onReady(p); optsRef.current.onGridReady && optsRef.current.onGridReady(p); },
+      });
+    } catch (err) { console.error(err); }
+    return () => { try { apiRef.current?.destroy?.(); } catch {} apiRef.current = null; };
+  }, []);
+  useEffect(() => { apiRef.current?.setGridOption && apiRef.current.setGridOption("rowData", rowData); }, [rowData]);
+  useEffect(() => { apiRef.current?.setGridOption && apiRef.current.setGridOption("columnDefs", columnDefs); }, [columnDefs]);
+  return <div ref={containerRef} className="ag-theme-quartz" style={{ width: "100%", height: "100%", ...style }} />;
+}
+
+const TreeCellRenderer = (params) => {
+  const { depth, hasChildren } = params.data || {};
+  const indent = (depth || 0) * 16;
+  const svg = hasChildren ? '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>' : "";
+  return `<div class="tree-cell" style="padding-left:${indent}px"><span class="chevron ${hasChildren ? "has" : ""}">${svg}</span><span class="tree-cell-text">${String(params.value ?? "").replace(/</g,"&lt;")}</span></div>`;
+};
+
+function BodyGrid({ doc, columnPaths, onEdit, onSelect, onFocusCol, gridApiRef }) {
+  const body = Array.isArray(doc?.body) ? doc.body : [];
+  const flat = useMemo(() => flattenBody(body), [body]);
+  const width = useMemo(() => Math.max(1, tableWidth(doc), (columnPaths || []).length), [doc, columnPaths]);
+  const focusedColRef = useRef(null);
+
+  const highlightColumn = useCallback((api, colId) => {
+    const prev = focusedColRef.current;
+    if (prev === colId) return;
+    const root = api.getGridElement?.() || document.querySelector(".ag-root-wrapper");
+    if (!root) {
+      focusedColRef.current = colId;
+      return;
+    }
+    if (prev) {
+      root.querySelectorAll(`.ag-cell[col-id="${prev}"]`).forEach((c) => c.classList.remove("col-focused"));
+      root.querySelectorAll(`.ag-header-cell[col-id="${prev}"]`).forEach((c) => c.classList.remove("col-header-focused"));
+    }
+    if (colId && String(colId).startsWith("c")) {
+      root.querySelectorAll(`.ag-cell[col-id="${colId}"]`).forEach((c) => c.classList.add("col-focused"));
+      root.querySelectorAll(`.ag-header-cell[col-id="${colId}"]`).forEach((c) => c.classList.add("col-header-focused"));
+    }
+    focusedColRef.current = colId;
+  }, []);
+
+  const columnDefs = useMemo(() => {
+    const cols = [
+      { headerName: "", colId: "__cb", width: 36, checkboxSelection: true, headerCheckboxSelection: true, suppressMovable: true, sortable: false, filter: false, resizable: false, pinned: "left", suppressNavigable: true },
+      { headerName: "#", colId: "__n", width: 42, suppressMovable: true, sortable: false, filter: false, editable: false, pinned: "left", suppressNavigable: true,
+        cellRenderer: (p) => `<div class="text-[11px] text-slate-400 pl-1">${(p.node.rowIndex ?? 0) + 1}</div>` },
+    ];
+    for (let i = 0; i < width; i++) {
+      cols.push({
+        headerName: (columnPaths && columnPaths[i]) || `Col ${i}`,
+        colId: `c${i}`,
+        valueGetter: (p) => p.data?.row_data?.[i] ?? "",
+        valueSetter: (p) => {
+          const arr = [...(p.data.row_data || [])];
+          while (arr.length <= i) arr.push("");
+          arr[i] = p.newValue ?? "";
+          p.data.row_data = arr;
+          return true;
+        },
+        editable: true, resizable: true, flex: 1, minWidth: 110,
+        cellRenderer: i === 0 ? TreeCellRenderer : undefined,
+        cellEditor: "agLargeTextCellEditor", cellEditorPopup: true,
+        cellEditorParams: { maxLength: 20000, rows: 3, cols: 40 },
+      });
+    }
+    return cols;
+  }, [width, columnPaths]);
+
+  return (
+    <AGGrid
+      columnDefs={columnDefs}
+      rowData={flat}
+      onReady={(p) => { if (gridApiRef) gridApiRef.current = p.api; }}
+      gridOptions={{
+        getRowId: (p) => p.data.id,
+        rowSelection: "multiple",
+        suppressRowClickSelection: false,
+        animateRows: false,
+        headerHeight: 28,
+        rowHeight: 32,
+        stopEditingWhenCellsLoseFocus: true,
+        enterNavigatesVertically: true,
+        enterNavigatesVerticallyAfterEdit: true,
+        navigateToNextCell: (params) => params.nextCellPosition,
+        tabToNextCell: (params) => params.nextCellPosition,
+        defaultColDef: { resizable: true, sortable: false, filter: false, wrapText: false, autoHeight: false },
+        onSelectionChanged: (e) => {
+          const paths = [];
+          e.api.getSelectedNodes().forEach((n) => { if (n.data?.path) paths.push(n.data.path); });
+          onSelect && onSelect(paths);
+        },
+        onCellValueChanged: (e) => {
+          const m = String(e.column.getColId()).match(/^c(\d+)$/);
+          if (!m || !e.data?.path) return;
+          onEdit && onEdit({ region: "body", path: e.data.path, column: Number(m[1]), value: String(e.newValue ?? "") });
+        },
+        onCellFocused: (e) => {
+          const id = e.column && e.column.getColId();
+          if (id && id.startsWith("c")) {
+            const wrap = (e.event && e.event.target && e.event.target.closest && e.event.target.closest(".ag-root-wrapper")) || null;
+            if (wrap) highlightColumn({ getGridElement: () => wrap }, id);
+            else highlightColumn(e.api, id);
+            onFocusCol && onFocusCol(Number(id.slice(1)));
+          }
+        },
+        onCellKeyDown: (e) => {
+          if (e.event && e.event.key === "Enter" && e.event.shiftKey && !gridIsEditing(e.api)) {
+            e.api.startEditingCell({ rowIndex: e.rowIndex, colKey: e.column.getColId() });
+          }
+        },
+      }}
+    />
+  );
+}
+
+function MiniTable({ doc, title, columnPaths }) {
+  const flat = flattenBody(doc?.body || []);
+  const headers = doc?.headers || [];
+  const w = Math.max(1, tableWidth(doc), (columnPaths || []).length);
+  return (
+    <div className="border border-slate-200 rounded-lg overflow-auto bg-white text-[11px]">
+      {title && <div className="px-3 py-1.5 border-b border-slate-200 font-medium text-slate-600">{title}</div>}
+      <table className="min-w-full">
+        <thead>
+          {headers.map((row, i) => (
+            <tr key={"h"+i} className="bg-slate-50">
+              {Array.from({ length: w }, (_, c) => (
+                <th key={c} className="px-2 py-1 text-left font-medium border-b border-slate-200 whitespace-nowrap">{row?.[c] ?? ""}</th>
+              ))}
+            </tr>
+          ))}
+        </thead>
+        <tbody>
+          {flat.map((r) => (
+            <tr key={r.id} className="border-b border-slate-100">
+              {Array.from({ length: w }, (_, c) => (
+                <td key={c} className="px-2 py-1 whitespace-nowrap" style={{ paddingLeft: c === 0 ? 8 + r.depth * 12 : undefined }}>
+                  {c === 0 && r.depth > 0 ? <span className="text-slate-300 mr-1">L</span> : null}
+                  {r.row_data[c] ?? ""}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function HeadersGrid({ headers, width, selected, onSelect, onEdit, gridApiRef }) {
+  const w = Math.max(1, width, ...(headers || []).map((r) => (r || []).length));
+  const rowData = useMemo(
+    () => (headers || []).map((row, i) => {
+      const obj = { __id: `h${i}`, __row: i };
+      for (let c = 0; c < w; c++) obj[`c${c}`] = row[c] ?? "";
+      return obj;
+    }),
+    [headers, w]
+  );
+  const columnDefs = useMemo(() => {
+    const cols = [
+      { headerName: "", colId: "__cb", width: 36, checkboxSelection: true, headerCheckboxSelection: true, suppressMovable: true, sortable: false, filter: false, resizable: false, pinned: "left", suppressNavigable: true },
+      { headerName: "#", colId: "__n", width: 42, suppressMovable: true, sortable: false, filter: false, editable: false, pinned: "left", suppressNavigable: true,
+        cellRenderer: (p) => `<div class="text-[11px] text-slate-400 pl-1">${(p.node.rowIndex ?? 0) + 1}</div>` },
+    ];
+    for (let i = 0; i < w; i++) {
+      cols.push({
+        headerName: `col ${i}`,
+        colId: `c${i}`,
+        field: `c${i}`,
+        editable: true, resizable: true, flex: 1, minWidth: 110,
+        cellEditor: "agLargeTextCellEditor", cellEditorPopup: true,
+        cellEditorParams: { maxLength: 20000, rows: 3, cols: 40 },
+      });
+    }
+    return cols;
+  }, [w]);
+  return (
+    <AGGrid
+      columnDefs={columnDefs}
+      rowData={rowData}
+      onReady={(p) => { if (gridApiRef) gridApiRef.current = p.api; }}
+      gridOptions={{
+        getRowId: (p) => p.data.__id,
+        rowSelection: "multiple",
+        animateRows: false,
+        headerHeight: 26,
+        rowHeight: 30,
+        stopEditingWhenCellsLoseFocus: true,
+        enterNavigatesVertically: true,
+        enterNavigatesVerticallyAfterEdit: true,
+        defaultColDef: { resizable: true, sortable: false, filter: false },
+        onSelectionChanged: (e) => {
+          const rows = [];
+          e.api.getSelectedNodes().forEach((n) => { if (n.data && n.data.__row != null) rows.push(n.data.__row); });
+          onSelect && onSelect(rows);
+        },
+        onCellValueChanged: (e) => {
+          const m = String(e.column.getColId()).match(/^c(\d+)$/);
+          if (!m) return;
+          onEdit && onEdit({ region: "header", row: e.data.__row, column: Number(m[1]), value: String(e.newValue ?? "") });
+        },
+      }}
+    />
+  );
+}
+
+function OpenScreen({ onLoaded, setImages }) {
+  const jsonlRef = useRef(null);
+  const imgRef = useRef(null);
+  const [jsonlFile, setJsonlFile] = useState(null);
+  const [imgFiles, setImgFiles] = useState([]);
+  const [preview, setPreview] = useState(null);
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const ingestJsonl = async (file) => {
+    setJsonlFile(file);
+    const text = await file.text();
+    const { records, errors } = parseJsonl(text);
+    setPreview({ records, errors, name: file.name });
+    setErr(errors[0] || "");
+  };
+
+  const takeImages = (files) => files.filter((f) => /^image\//.test(f.type) || /\.(png|jpe?g|gif|webp)$/i.test(f.name));
+  const onDrop = async (e) => {
+    e.preventDefault();
+    const files = [...(e.dataTransfer?.files || [])];
+    const jsonl = files.find((x) => /\.(jsonl|json|ndjson)$/i.test(x.name));
+    const images = takeImages(files);
+    if (jsonl) ingestJsonl(jsonl);
+    if (images.length) setImgFiles(images);
+  };
+
+  const open = async () => {
+    if (!preview?.records?.length) { setErr("Choose a labels.jsonl file first."); return; }
+    setBusy(true); setErr("");
+    try {
+      const map = {};
+      imgFiles.forEach((f) => { map[f.name] = URL.createObjectURL(f); });
+      setImages(map);
+      const res = await api("/api/load", { records: preview.records, doc_name: preview.name });
+      onLoaded(res.state);
+    } catch (e) { setErr(e.message); }
+    finally { setBusy(false); }
+  };
+
+  return (
+    <div className="h-full flex flex-col">
+      <header className="h-12 flex items-center gap-2 px-4 bg-white border-b border-slate-200">
+        <span className="text-blue-600">{I.table}</span>
+        <div className="font-semibold text-sm">Table Studio</div>
+        <span className="chip">Demo</span>
+      </header>
+      <div className="flex-1 overflow-auto">
+        <div className="max-w-3xl mx-auto py-12 px-6">
+          <h1 className="text-2xl font-semibold tracking-tight">Open a document</h1>
+          <p className="text-slate-500 mt-1 text-sm">Load extracted tables from a labels JSONL file and optional source images. The original files stay unchanged.</p>
+          <div className="grid md:grid-cols-2 gap-4 mt-8">
+            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+              <div className="text-xs uppercase tracking-wider text-slate-400 mb-2">Extracted tables</div>
+              <div className="drop" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
+                <div className="flex justify-center text-slate-400 mb-2">{I.file}</div>
+                <div className="text-sm font-medium">{jsonlFile ? jsonlFile.name : "Drop labels.jsonl"}</div>
+                <div className="text-xs text-slate-400 mt-1">or
+                  <button className="text-blue-600 ml-1" onClick={() => jsonlRef.current?.click()}>browse</button>
+                </div>
+              </div>
+              {preview && (
+                <div className="mt-3 text-sm text-slate-600">
+                  <span className="chip ok">{preview.records.length} tables</span>
+                  {preview.errors.length ? <span className="chip err ml-2">{preview.errors.length} parse errors</span> : <span className="chip ok ml-2">Looks good</span>}
+                </div>
+              )}
+              <input ref={jsonlRef} type="file" accept=".jsonl,.json,.ndjson,text/plain" className="hidden" onChange={(e) => e.target.files?.[0] && ingestJsonl(e.target.files[0])} />
+            </div>
+            <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
+              <div className="text-xs uppercase tracking-wider text-slate-400 mb-2">Source images</div>
+              <div className="drop" onDragOver={(e) => e.preventDefault()} onDrop={onDrop}>
+                <div className="flex justify-center text-slate-400 mb-2">{I.image}</div>
+                <div className="text-sm font-medium">{imgFiles.length ? `${imgFiles.length} image(s)` : "Drop a folder of table crops"}</div>
+                <div className="text-xs text-slate-400 mt-1">optional ·
+                  <button className="text-blue-600 ml-1" onClick={() => imgRef.current?.click()}>browse</button>
+                </div>
+              </div>
+              <input ref={imgRef} type="file" multiple accept="image/*" className="hidden" onChange={(e) => setImgFiles([...e.target.files || []])} />
+            </div>
+          </div>
+          {err && <div className="mt-4 text-sm text-red-600 flex items-center gap-2">{I.alert}{err}</div>}
+          <div className="mt-8 flex justify-end">
+            <button className="btn primary" disabled={busy || !preview?.records?.length} onClick={open}>
+              {busy ? "Opening…" : "Open workspace"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+const TOOLS = [
+  { group: "Combine & split", items: [
+    { id: "merge_tables", label: "Merge tables" },
+    { id: "split_table", label: "Split table" },
+    { id: "join_row_fragments", label: "Join row fragments" },
+  ]},
+  { group: "Columns", items: [
+    { id: "map_columns", label: "Map & reorder" },
+    { id: "insert_columns", label: "Add column" },
+    { id: "delete_columns", label: "Remove column" },
+  ]},
+  { group: "Hierarchy", items: [
+    { id: "move_rows", label: "Set parent" },
+    { id: "rebuild_hierarchy", label: "Rebuild hierarchy" },
+  ]},
+  { group: "Headers & cells", items: [
+    { id: "set_headers", label: "Set headers" },
+    { id: "transfer_header_rows", label: "Headers ↔ body" },
+    { id: "remove_repeated_headers", label: "Remove repeated headers" },
+    { id: "expand_merged_cells", label: "Fill merged range" },
+    { id: "normalize_width", label: "Normalize columns" },
+  ]},
+  { group: "Reuse", items: [
+    { id: "apply_recipe", label: "Apply recipe" },
+  ]},
+];
+
+const RECIPE_OPS = new Set(["edit_cells","insert_rows","delete_rows","duplicate_rows","move_rows","insert_columns","delete_columns","map_columns","set_headers","transfer_header_rows","rebuild_hierarchy","remove_repeated_headers","join_row_fragments","expand_merged_cells","normalize_width"]);
+
+function TransformForm({ tool, ctx }) {
+  const { doc, columnPaths, selectedPaths, selectedHeaders, focusedCol, tables, selectedIds, activeId, onPreview, onApply, recipes, recipeDraft, onSaveRecipe } = ctx;
+  const w = Math.max(1, tableWidth(doc), (columnPaths || []).length);
+  const flat = flattenBody(doc?.body || []);
+  const [local, setLocal] = useState({});
+  useEffect(() => { setLocal({}); }, [tool, activeId]);
+
+  if (tool === "map_columns") {
+    const cols = (columnPaths || []).map((name, i) => ({ i, name }));
+    const order = local.order || cols.map((c) => c.i);
+    const excluded = new Set(local.exclude || []);
+    const toggle = (i) => {
+      const next = new Set(excluded);
+      if (next.has(i)) next.delete(i); else next.add(i);
+      setLocal({ ...local, exclude: [...next] });
+    };
+    const move = (idx, dir) => {
+      const next = [...order];
+      const j = idx + dir;
+      if (j < 0 || j >= next.length) return;
+      [next[idx], next[j]] = [next[j], next[idx]];
+      setLocal({ ...local, order: next });
+    };
+        const keepUnmapped = local.keep !== false;
+        const mapped = order.filter((i) => !excluded.has(i));
+        const args = keepUnmapped
+          ? { mapping: mapped }
+          : { mapping: mapped, exclude: [...excluded] };
+        const sig = (columnPaths || []).join("\0");
+        const wanted = selectedIds.length ? selectedIds : [activeId];
+        const ids = wanted.filter((id) => {
+          const t = tables.find((x) => x.id === id);
+          return t && (t.column_paths || []).join("\0") === sig;
+        });
+        const skipped = wanted.filter((id) => !ids.includes(id));
+        return (
+          <div className="space-y-3">
+            <p className="text-xs text-slate-500">Reorder source columns. Unchecked columns are excluded unless you keep unmapped columns. Only tables with the same column paths are included.</p>
+            <div className="text-xs text-slate-500">{ids.length} compatible table(s)</div>
+            {skipped.length > 0 && (
+              <div className="text-xs text-amber-700 bg-amber-50 rounded-lg px-2 py-1">Skipping {skipped.length}: column paths differ from this table.</div>
+            )}
+            <label className="flex items-center gap-2 text-xs text-slate-600">
+              <input type="checkbox" checked={keepUnmapped} onChange={(e) => setLocal({ ...local, keep: e.target.checked })} />
+              Keep unmapped columns
+            </label>
+            <div className="space-y-1 max-h-64 overflow-auto">
+              {order.map((src, idx) => (
+                <div key={src} className="flex items-center gap-2 text-xs bg-slate-50 rounded-lg px-2 py-1">
+                  <input type="checkbox" checked={!excluded.has(src)} onChange={() => toggle(src)} />
+                  <span className="flex-1 truncate">{src}: {cols[src]?.name}</span>
+                  <button className="btn ghost" style={{ padding: 2 }} onClick={() => move(idx, -1)}>{I.up}</button>
+                  <button className="btn ghost" style={{ padding: 2 }} onClick={() => move(idx, 1)}>{I.down}</button>
+                </div>
+              ))}
+            </div>
+            <button className="btn primary w-full justify-center" disabled={!ids.length} onClick={() => onPreview("map_columns", args, "Mapped columns", ids)}>Preview mapping</button>
+          </div>
+        );
+  }
+
+  if (tool === "merge_tables") {
+    const ids = selectedIds.length >= 2 ? selectedIds : [];
+    const headerMode = local.headers || "first";
+    const attachParent = local.parent || "";
+    const attachments = {};
+    if (attachParent) {
+      const path = attachParent.split(".").map(Number);
+      ids.slice(1).forEach((_, i) => { attachments[i + 1] = { parent: path }; });
+    }
+    return (
+      <div className="space-y-3">
+        <p className="text-xs text-slate-500">Select two or more tables in the sidebar, in merge order. Optionally nest continuation rows under a parent from the first table.</p>
+        <div className="text-xs text-slate-600">{ids.length} table(s) selected</div>
+        <label className="block text-xs text-slate-500">Header handling
+          <select className="field mt-1" value={headerMode} onChange={(e) => setLocal({ ...local, headers: e.target.value })}>
+            <option value="first">Keep first header</option>
+            <option value="concat">Concatenate headers</option>
+            <option value="none">No headers</option>
+          </select>
+        </label>
+        <label className="block text-xs text-slate-500">Continue later tables under
+          <select className="field mt-1" value={attachParent} onChange={(e) => setLocal({ ...local, parent: e.target.value })}>
+            <option value="">Append at root</option>
+            {flat.filter((r) => r.depth === 0).map((r) => (
+              <option key={r.id} value={r.id}>{r.row_data[0] || r.id}</option>
+            ))}
+          </select>
+        </label>
+        <button className="btn primary w-full justify-center" disabled={ids.length < 2}
+          onClick={() => onPreview("merge_tables", { headers: headerMode, attachments: Object.keys(attachments).length ? attachments : undefined }, "Merged tables", ids)}>
+          Preview merge
+        </button>
+      </div>
+    );
+  }
+
+  if (tool === "split_table") {
+    const boundary = selectedPaths[0];
+    return (
+      <div className="space-y-3">
+        <p className="text-xs text-slate-500">Select the first row of the second piece. Splits that cut through a subtree are rejected unless you allow promote.</p>
+        <div className="text-xs">{boundary ? `Boundary ${JSON.stringify(boundary)}` : "Select a body row"}</div>
+        <label className="block text-xs text-slate-500">Headers
+          <select className="field mt-1" value={local.headers || "inherit"} onChange={(e) => setLocal({ ...local, headers: e.target.value })}>
+            <option value="inherit">Copy headers to every piece</option>
+            <option value="first">First piece only</option>
+            <option value="none">None</option>
+          </select>
+        </label>
+        <label className="block text-xs text-slate-500">Subtree cuts
+          <select className="field mt-1" value={local.subtree || "reject"} onChange={(e) => setLocal({ ...local, subtree: e.target.value })}>
+            <option value="reject">Reject</option>
+            <option value="promote">Promote orphaned rows</option>
+          </select>
+        </label>
+        <button className="btn primary w-full justify-center" disabled={!boundary}
+          onClick={() => onPreview("split_table", { boundaries: [boundary], headers: local.headers || "inherit", subtree: local.subtree || "reject" }, "Split table")}>
+          Preview split
+        </button>
+      </div>
+    );
+  }
+
+  if (tool === "join_row_fragments") {
+    return (
+      <div className="space-y-3">
+        <p className="text-xs text-slate-500">Select two or more fragment rows. Conflicting populated cells are rejected unless you concatenate.</p>
+        <div className="text-xs">{selectedPaths.length} row(s) selected</div>
+        <label className="block text-xs text-slate-500">Column rule
+          <select className="field mt-1" value={local.rule || "unique"} onChange={(e) => setLocal({ ...local, rule: e.target.value })}>
+            <option value="unique">Keep unique values</option>
+            <option value="concat">Concatenate text</option>
+          </select>
+        </label>
+        <label className="block text-xs text-slate-500">Separator
+          <input className="field mt-1" value={local.sep ?? " "} onChange={(e) => setLocal({ ...local, sep: e.target.value })} />
+        </label>
+        <label className="block text-xs text-slate-500">Children
+          <select className="field mt-1" value={local.on_children || ""} onChange={(e) => setLocal({ ...local, on_children: e.target.value })}>
+            <option value="">Unambiguous only</option>
+            <option value="first">First fragment</option>
+            <option value="last">Last fragment</option>
+            <option value="concat">Concatenate children</option>
+          </select>
+        </label>
+        <button className="btn primary w-full justify-center" disabled={selectedPaths.length < 2}
+          onClick={() => {
+            const rules = {};
+            for (let c = 0; c < w; c++) rules[c] = local.rule || "unique";
+            onPreview("join_row_fragments", {
+              groups: [selectedPaths],
+              column_rules: rules,
+              separator: local.sep ?? " ",
+              on_children: local.on_children || null,
+            }, "Joined fragments");
+          }}>Preview join</button>
+      </div>
+    );
+  }
+
+  if (tool === "insert_columns" || tool === "delete_columns") {
+    const idx = local.index ?? (focusedCol == null ? w : focusedCol + (tool === "insert_columns" ? 1 : 0));
+    return (
+      <div className="space-y-3">
+        <label className="block text-xs text-slate-500">Column index
+          <input type="number" className="field mt-1" value={idx} onChange={(e) => setLocal({ ...local, index: Number(e.target.value) })} />
+        </label>
+        {tool === "insert_columns" && (
+          <button className="btn primary w-full justify-center" onClick={() => onApply("insert_columns", { index: Number(idx), count: 1 }, "Inserted column")}>Insert column</button>
+        )}
+        {tool === "delete_columns" && (
+          <button className="btn primary w-full justify-center" onClick={() => onApply("delete_columns", { columns: [Number(idx)] }, "Removed column")}>Remove column</button>
+        )}
+      </div>
+    );
+  }
+
+  if (tool === "move_rows") {
+    const parent = local.parent === "" ? null : (local.parent || (selectedPaths[0] ? selectedPaths[0].slice(0, -1) : null));
+    const parentKey = parent == null ? "" : pathKey(parent);
+    return (
+      <div className="space-y-3">
+        <p className="text-xs text-slate-500">Move selected rows (with subtrees) under a parent. Indent/outdent in the toolbar do the same via this operation.</p>
+        <label className="block text-xs text-slate-500">Parent
+          <select className="field mt-1" value={parentKey} onChange={(e) => setLocal({ ...local, parent: e.target.value ? e.target.value.split(".").map(Number) : "" })}>
+            <option value="">Root</option>
+            {flat.map((r) => <option key={r.id} value={r.id}>{"— ".repeat(r.depth)}{r.row_data[0] || r.id}</option>)}
+          </select>
+        </label>
+        <label className="block text-xs text-slate-500">Index
+          <input type="number" className="field mt-1" value={local.index ?? ""} placeholder="append" onChange={(e) => setLocal({ ...local, index: e.target.value === "" ? "" : Number(e.target.value) })} />
+        </label>
+        <button className="btn primary w-full justify-center" disabled={!selectedPaths.length}
+          onClick={() => onApply("move_rows", { paths: selectedPaths, parent: parentKey === "" ? null : parentKey.split(".").map(Number), index: local.index === "" || local.index == null ? null : Number(local.index) }, "Moved rows")}>
+          Move rows
+        </button>
+      </div>
+    );
+  }
+
+  if (tool === "rebuild_hierarchy") {
+    const range = selectedPaths.length ? [...selectedPaths].sort((a, b) => pathKey(a).localeCompare(pathKey(b), undefined, { numeric: true })) : [];
+    const start = range[0];
+    const end = range[range.length - 1];
+    const startI = start ? flat.findIndex((r) => r.id === pathKey(start)) : -1;
+    const endI = end ? flat.findIndex((r) => r.id === pathKey(end)) : -1;
+    const slice = startI >= 0 && endI >= startI ? flat.slice(startI, endI + 1) : [];
+    const depths = local.depths || slice.map((r) => r.depth);
+    return (
+      <div className="space-y-3">
+        <p className="text-xs text-slate-500">Select a contiguous body range, then set depths. Text and order are preserved.</p>
+        <div className="max-h-48 overflow-auto space-y-1">
+          {slice.map((r, i) => (
+            <div key={r.id} className="flex items-center gap-2 text-xs">
+              <input type="number" className="field w-14" value={depths[i] ?? r.depth}
+                onChange={(e) => { const d = [...(local.depths || slice.map((x) => x.depth))]; d[i] = Number(e.target.value); setLocal({ ...local, depths: d }); }} />
+              <span className="truncate">{r.row_data[0] || r.id}</span>
+            </div>
+          ))}
+        </div>
+        <button className="btn primary w-full justify-center" disabled={!start}
+          onClick={() => onPreview("rebuild_hierarchy", { start, end, depths: local.depths || slice.map((r) => r.depth) }, "Rebuilt hierarchy")}>
+          Preview hierarchy
+        </button>
+      </div>
+    );
+  }
+
+  if (tool === "set_headers") {
+    return (
+      <div className="space-y-3">
+        <p className="text-xs text-slate-500">Edit header cells in the grid, or append an empty header row.</p>
+        <button className="btn ghost w-full justify-center" onClick={() => {
+          const headers = [...(doc.headers || []), Array(w).fill("")];
+          onApply("set_headers", { headers }, "Added header row");
+        }}>Add header row</button>
+        {selectedHeaders.length > 0 && (
+          <button className="btn danger w-full justify-center" onClick={() => {
+            const headers = (doc.headers || []).filter((_, i) => !selectedHeaders.includes(i));
+            onApply("set_headers", { headers }, "Removed header row");
+          }}>Remove selected header rows</button>
+        )}
+      </div>
+    );
+  }
+
+  if (tool === "transfer_header_rows") {
+    const direction = local.direction || "to_body";
+    return (
+      <div className="space-y-3">
+        <label className="block text-xs text-slate-500">Direction
+          <select className="field mt-1" value={direction} onChange={(e) => setLocal({ ...local, direction: e.target.value })}>
+            <option value="to_body">Headers → body</option>
+            <option value="to_headers">Body → headers</option>
+          </select>
+        </label>
+        <label className="block text-xs text-slate-500">Mode
+          <select className="field mt-1" value={local.mode || "copy"} onChange={(e) => setLocal({ ...local, mode: e.target.value })}>
+            <option value="copy">Copy</option>
+            <option value="move">Move</option>
+          </select>
+        </label>
+        <label className="block text-xs text-slate-500">Children (move from body)
+          <select className="field mt-1" value={local.on_children || ""} onChange={(e) => setLocal({ ...local, on_children: e.target.value })}>
+            <option value="">Unambiguous / copy row only</option>
+            <option value="flatten">Flatten into header rows</option>
+            <option value="promote">Promote children in body</option>
+          </select>
+        </label>
+        <button className="btn primary w-full justify-center"
+          onClick={() => {
+            const rows = direction === "to_body" ? selectedHeaders : selectedPaths;
+            onPreview("transfer_header_rows", {
+              direction, mode: local.mode || "copy", rows,
+              on_children: local.on_children || null, index: 0,
+            }, "Transferred header rows");
+          }}>Preview transfer</button>
+      </div>
+    );
+  }
+
+  if (tool === "remove_repeated_headers") {
+    return (
+      <div className="space-y-3">
+        <p className="text-xs text-slate-500">Removes body rows whose cells exactly match a header row, or the rows you selected.</p>
+        <label className="block text-xs text-slate-500">If a match has children
+          <select className="field mt-1" value={local.on_children || ""} onChange={(e) => setLocal({ ...local, on_children: e.target.value })}>
+            <option value="">Reject</option>
+            <option value="promote">Promote children</option>
+            <option value="drop">Drop children</option>
+          </select>
+        </label>
+        <button className="btn primary w-full justify-center"
+          onClick={() => onPreview("remove_repeated_headers", {
+            paths: selectedPaths.length ? selectedPaths : undefined,
+            on_children: local.on_children || null,
+          }, "Removed repeated headers")}>Preview removal</button>
+      </div>
+    );
+  }
+
+  if (tool === "expand_merged_cells") {
+    const start = local.start ?? (focusedCol ?? 0);
+    const end = local.end ?? (focusedCol ?? 0);
+    return (
+      <div className="space-y-3">
+        <p className="text-xs text-slate-500">Only the range you specify is filled. Nothing is inferred from neighbouring blanks.</p>
+        <label className="block text-xs text-slate-500">Region
+          <select className="field mt-1" value={local.region || "header"} onChange={(e) => setLocal({ ...local, region: e.target.value })}>
+            <option value="header">Header</option>
+            <option value="body">Body</option>
+          </select>
+        </label>
+        <div className="grid grid-cols-2 gap-2">
+          <label className="text-xs text-slate-500">Start col<input type="number" className="field mt-1" value={start} onChange={(e) => setLocal({ ...local, start: Number(e.target.value) })} /></label>
+          <label className="text-xs text-slate-500">End col<input type="number" className="field mt-1" value={end} onChange={(e) => setLocal({ ...local, end: Number(e.target.value) })} /></label>
+        </div>
+        <label className="block text-xs text-slate-500">Value (optional)
+          <input className="field mt-1" value={local.value || ""} placeholder="first non-empty in range" onChange={(e) => setLocal({ ...local, value: e.target.value })} />
+        </label>
+        <button className="btn primary w-full justify-center"
+          onClick={() => {
+            const region = local.region || "header";
+            const spec = { region, start: Number(start), end: Number(end) };
+            if (local.value) spec.value = local.value;
+            if (region === "header") spec.row = selectedHeaders[0] ?? 0;
+            else spec.path = selectedPaths[0] || [0];
+            onPreview("expand_merged_cells", { ranges: [spec] }, "Expanded merged cells");
+          }}>Preview fill</button>
+      </div>
+    );
+  }
+
+  if (tool === "normalize_width") {
+    return (
+      <div className="space-y-3">
+        <p className="text-xs text-slate-500">Pads short rows. Rows longer than this width are rejected, never truncated.</p>
+        <label className="block text-xs text-slate-500">Width
+          <input type="number" className="field mt-1" value={local.width ?? w} onChange={(e) => setLocal({ ...local, width: Number(e.target.value) })} />
+        </label>
+        <button className="btn primary w-full justify-center" onClick={() => onApply("normalize_width", { width: Number(local.width ?? w) }, "Normalized width")}>Normalize</button>
+      </div>
+    );
+  }
+
+  if (tool === "apply_recipe") {
+    return (
+      <div className="space-y-3">
+        <p className="text-xs text-slate-500">Replay an ordered list of library operations. Saved recipes stay in this session only.</p>
+        {(recipes || []).map((r) => (
+          <button key={r.id} className="btn ghost w-full justify-between" onClick={() => onPreview("apply_recipe", { recipe: r.steps }, r.name)}>
+            <span>{r.name}</span><span className="chip">{r.steps.length} steps</span>
+          </button>
+        ))}
+        {recipeDraft.length > 0 && (
+          <>
+            <div className="text-xs text-slate-500">{recipeDraft.length} step(s) in this session</div>
+            <input className="field" placeholder="Recipe name" value={local.name || ""} onChange={(e) => setLocal({ ...local, name: e.target.value })} />
+            <button className="btn ghost w-full justify-center" onClick={() => onSaveRecipe(local.name || "Untitled recipe", recipeDraft)}>Save recipe</button>
+            <button className="btn primary w-full justify-center" onClick={() => onPreview("apply_recipe", { recipe: recipeDraft }, "Apply recipe", selectedIds.length ? selectedIds : [activeId])}>Preview recipe</button>
+          </>
+        )}
+      </div>
+    );
+  }
+
+  return <p className="text-xs text-slate-500">Choose a tool.</p>;
+}
+
+function App() {
+  const [session, setSession] = useState(null);
+  const [images, setImages] = useState({});
+  const [activeId, setActiveId] = useState(null);
+  const [selectedIds, setSelectedIds] = useState([]);
+  const [selectedPaths, setSelectedPaths] = useState([]);
+  const [selectedHeaders, setSelectedHeaders] = useState([]);
+  const [focusedCol, setFocusedCol] = useState(null);
+  const [centerTab, setCenterTab] = useState("table");
+  const [tool, setTool] = useState(null);
+  const [preview, setPreview] = useState(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [recipeDraft, setRecipeDraft] = useState([]);
+  const [tableSearch, setTableSearch] = useState("");
+  const [sidebarOpen, setSidebarOpen] = useState(() => lsGet("ts_sidebar", "1") !== "0");
+  const [toolsOpen, setToolsOpen] = useState(() => lsGet("ts_tools", "1") !== "0");
+  const [headersCollapsed, setHeadersCollapsed] = useState(() => lsGet("ts_headers", "0") === "1");
+  const [orientation, setOrientation] = useState(() => lsGet("ts_orient", "row"));
+  const [swapped, setSwapped] = useState(() => lsGet("ts_swap", "0") === "1");
+  const [focusMode, setFocusMode] = useState(false);
+  const [splitRatio, setSplitRatio] = useState(() => {
+    const v = parseFloat(lsGet("ts_split", "0.38"));
+    return Number.isFinite(v) ? clamp(v, 0.15, 0.85) : 0.38;
+  });
+  const [dragging, setDragging] = useState(false);
+  const gridApiRef = useRef(null);
+  const headersApiRef = useRef(null);
+  const paneRef = useRef(null);
+  const opsRef = useRef({});
+  const lastArgsRef = useRef(null);
+
+  useEffect(() => lsSet("ts_sidebar", sidebarOpen ? "1" : "0"), [sidebarOpen]);
+  useEffect(() => lsSet("ts_tools", toolsOpen ? "1" : "0"), [toolsOpen]);
+  useEffect(() => lsSet("ts_headers", headersCollapsed ? "1" : "0"), [headersCollapsed]);
+  useEffect(() => lsSet("ts_orient", orientation), [orientation]);
+  useEffect(() => lsSet("ts_swap", swapped ? "1" : "0"), [swapped]);
+  useEffect(() => lsSet("ts_split", splitRatio), [splitRatio]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/state")
+      .then((r) => r.json())
+      .then((s) => {
+        if (cancelled || !s || !Array.isArray(s.tables) || !s.tables.length) return;
+        setSession(s);
+        setActiveId(s.active_id);
+        setSelectedIds(s.tables.map((t) => t.id).slice(0, 1));
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  const tables = session?.tables || [];
+  const activeMeta = tables.find((t) => t.id === activeId) || tables[0];
+  const doc = session?.active;
+  const imageSrc = activeMeta ? (images[activeMeta.image_key] || images[basename(activeMeta.image_key)]) : null;
+  const flatBody = flattenBody(doc?.body || []);
+  const canIndent = selectedPaths.length === 1 && !!previousSibling(flatBody, selectedPaths[0]);
+  const canOutdent = selectedPaths.length === 1 && selectedPaths[0].length >= 2;
+
+  const refreshFrom = (state) => {
+    setSession(state);
+    const id = state.active_id;
+    setActiveId(id);
+    setSelectedPaths([]);
+    setSelectedHeaders([]);
+    setError("");
+    const live = new Set((state.tables || []).map((t) => t.id));
+    setSelectedIds((prev) => {
+      const keep = prev.filter((x) => live.has(x));
+      return keep.length ? keep : (id ? [id] : []);
+    });
+  };
+
+  const loadActive = async (id) => {
+    try {
+      const s = await fetch("/api/state?id=" + encodeURIComponent(id)).then((r) => r.json());
+      setSession(s);
+      setActiveId(s.active_id);
+    } catch (e) { setError(e.message); }
+  };
+
+  const run = async (kind, op, args, label, ids) => {
+    setBusy(true); setError("");
+    try {
+      const table_ids = ids || (op === "merge_tables" ? selectedIds : (activeId ? [activeId] : []));
+      const data = await api(kind === "preview" ? "/api/preview" : "/api/apply", { op, args, table_ids, label });
+      if (kind === "preview") {
+        setPreview(data);
+        setCenterTab("compare");
+      } else {
+        setPreview(null);
+        if (RECIPE_OPS.has(op)) setRecipeDraft((d) => [...d, { op, ...(args || {}) }]);
+        refreshFrom(data.state);
+        if (data.state) setActiveId(data.state.active_id);
+      }
+    } catch (e) {
+      setError(e.message);
+      setPreview(null);
+    } finally { setBusy(false); }
+  };
+
+  const onPreview = (op, args, label, ids) => run("preview", op, args, label, ids);
+  const onApply = (op, args, label, ids) => run("apply", op, args, label, ids);
+  const onPreview2 = (op, args, label, ids) => { lastArgsRef.current = args; onPreview(op, args, label, ids); };
+  const confirmPreview2 = () => {
+    if (!preview) return;
+    run("apply", preview.op, preview.args || lastArgsRef.current || {}, preview.label, preview.table_ids);
+  };
+  const onEditCell = (change) => onApply("edit_cells", { changes: [change] }, "Edited cell");
+
+  const rowOp = (kind) => {
+    if (!doc) return;
+    const flat = flattenBody(doc.body);
+    const w = tableWidth(doc);
+    if (kind === "add_row" && !selectedPaths.length) {
+      return onApply("insert_rows", { rows: [emptyRow(w)], parent: null, index: null }, "Inserted row");
+    }
+    if (!selectedPaths.length && kind !== "add_row") return;
+    const path = selectedPaths[0];
+    if (kind === "delete") return onApply("delete_rows", { paths: selectedPaths }, "Deleted rows");
+    if (kind === "duplicate") return onApply("duplicate_rows", { paths: [path] }, "Duplicated rows");
+    if (kind === "add_row") {
+      const parent = path.length > 1 ? path.slice(0, -1) : null;
+      return onApply("insert_rows", { rows: [emptyRow(w)], parent, index: path[path.length - 1] + 1 }, "Inserted row");
+    }
+    if (kind === "add_child") return onApply("insert_rows", { rows: [emptyRow(w)], parent: path, index: null }, "Inserted child");
+    if (kind === "indent") {
+      const sib = previousSibling(flat, path);
+      if (!sib) { setError("Cannot indent: no previous sibling at this level."); return; }
+      return onApply("move_rows", { paths: [path], parent: sib, index: null }, "Indented row");
+    }
+    if (kind === "outdent") {
+      if (path.length < 2) { setError("Cannot outdent a top-level row."); return; }
+      const grand = path.length > 2 ? path.slice(0, -2) : null;
+      return onApply("move_rows", { paths: [path], parent: grand, index: path[path.length - 2] + 1 }, "Outdented row");
+    }
+    if (kind === "up") {
+      const i = path[path.length - 1];
+      if (i <= 0) return;
+      const parent = path.length > 1 ? path.slice(0, -1) : null;
+      return onApply("move_rows", { paths: [path], parent, index: i - 1 }, "Moved up");
+    }
+    if (kind === "down") {
+      const i = path[path.length - 1];
+      const n = siblingCount(flat, path);
+      if (i >= n - 1) return;
+      const parent = path.length > 1 ? path.slice(0, -1) : null;
+      return onApply("move_rows", { paths: [path], parent, index: i + 1 }, "Moved down");
+    }
+  };
+
+  const colOp = (kind) => {
+    if (!doc) return;
+    const w = tableWidth(doc);
+    if (kind === "add") {
+      const index = focusedCol == null ? w : focusedCol + 1;
+      return onApply("insert_columns", { index, count: 1 }, "Inserted column");
+    }
+    if (w <= 1) return;
+    const col = focusedCol == null ? w - 1 : focusedCol;
+    return onApply("delete_columns", { columns: [col] }, "Removed column");
+  };
+
+  const openTool = (id) => {
+    setTool(id);
+    setToolsOpen(true);
+    setFocusMode(false);
+  };
+
+  const quickTransfer = (direction) => {
+    const rows = direction === "to_body"
+      ? (selectedHeaders.length ? selectedHeaders : (doc?.headers || []).map((_, i) => i))
+      : selectedPaths;
+    if (!rows.length) {
+      setError(direction === "to_body" ? "Select header rows first, or add a header row." : "Select body rows to copy into headers.");
+      return;
+    }
+    openTool("transfer_header_rows");
+    onPreview2("transfer_header_rows", { direction, mode: "copy", rows, index: 0 }, "Transferred header rows");
+  };
+
+  const undo = async () => { try { const d = await api("/api/undo", {}); refreshFrom(d.state); setPreview(null); } catch (e) { setError(e.message); } };
+  const redo = async () => { try { const d = await api("/api/redo", {}); refreshFrom(d.state); setPreview(null); } catch (e) { setError(e.message); } };
+  const exportJsonl = async () => {
+    try {
+      const res = await api("/api/export.jsonl");
+      const blob = await res.blob();
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = (session?.doc_name || "labels").replace(/\.jsonl?$/, "") + "_corrected.jsonl";
+      a.click();
+    } catch (e) { setError(e.message); }
+  };
+  const saveRecipe = async (name, steps) => {
+    try {
+      const d = await api("/api/recipes", { name, steps });
+      setSession((s) => ({ ...s, recipes: d.recipes }));
+    } catch (e) { setError(e.message); }
+  };
+
+  opsRef.current = {
+    undo, redo, exportJsonl, rowOp, colOp, confirmPreview2,
+    setSidebarOpen, setToolsOpen, setFocusMode, setHelpOpen, setPreview, setCenterTab, setError,
+    session, preview, selectedPaths, canIndent, canOutdent,
+  };
+
+  useEffect(() => {
+    const handler = (e) => {
+      const typing = isTypingTarget(e.target);
+      const editing = gridIsEditing(gridApiRef.current) || gridIsEditing(headersApiRef.current);
+      const meta = e.metaKey || e.ctrlKey;
+      const k = e.key.toLowerCase();
+      const ops = opsRef.current;
+
+      if (e.key === "?" && !typing && !editing && !meta) { e.preventDefault(); ops.setHelpOpen((v) => !v); return; }
+      if (e.key === "Escape") {
+        if (ops.preview) { e.preventDefault(); ops.setPreview(null); ops.setCenterTab("table"); return; }
+        ops.setHelpOpen(false);
+        ops.setFocusMode(false);
+        return;
+      }
+      if (meta && k === "z" && !e.shiftKey) {
+        if (typing || editing) return;
+        e.preventDefault(); ops.undo(); return;
+      }
+      if (meta && ((k === "z" && e.shiftKey) || k === "y")) {
+        if (typing || editing) return;
+        e.preventDefault(); ops.redo(); return;
+      }
+      if (meta && k === "s") { e.preventDefault(); ops.exportJsonl(); return; }
+      if (meta && k === "b") { e.preventDefault(); ops.setSidebarOpen((v) => !v); return; }
+      if (meta && (e.key === "\\" || k === "\\")) { e.preventDefault(); ops.setToolsOpen((v) => !v); return; }
+      if (meta && e.shiftKey && k === "f") { e.preventDefault(); ops.setFocusMode((v) => !v); return; }
+      if (meta && (k === "backspace" || k === "delete")) {
+        if (typing || editing) return;
+        e.preventDefault(); ops.rowOp("delete"); return;
+      }
+      if (typing || editing || meta) return;
+      if (e.altKey && e.key === "ArrowRight") { e.preventDefault(); if (ops.canIndent) ops.rowOp("indent"); return; }
+      if (e.altKey && e.key === "ArrowLeft") { e.preventDefault(); if (ops.canOutdent) ops.rowOp("outdent"); return; }
+      if (e.altKey && e.key === "ArrowUp") { e.preventDefault(); ops.rowOp("up"); return; }
+      if (e.altKey && e.key === "ArrowDown") { e.preventDefault(); ops.rowOp("down"); return; }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, []);
+
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      e.preventDefault();
+      e.returnValue = "Unsaved Table Studio edits will be lost.";
+      return e.returnValue;
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, []);
+
+  useEffect(() => {
+    if (!dragging) return;
+    const onMove = (e) => {
+      const el = paneRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      let ratio;
+      if (orientation === "row") {
+        const x = clamp(e.clientX - r.left, 80, r.width - 80);
+        ratio = swapped ? 1 - x / r.width : x / r.width;
+      } else {
+        const y = clamp(e.clientY - r.top, 80, r.height - 80);
+        ratio = swapped ? 1 - y / r.height : y / r.height;
+      }
+      setSplitRatio(clamp(ratio, 0.15, 0.85));
+    };
+    const onUp = () => setDragging(false);
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+    return () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+    };
+  }, [dragging, orientation, swapped]);
+
+  if (!session) return <OpenScreen onLoaded={(s) => { refreshFrom(s); setSelectedIds(s.tables.map((t) => t.id).slice(0, 1)); }} setImages={setImages} />;
+
+  const folders = {};
+  tables.forEach((t) => {
+    const k = t.source_folder || "Tables";
+    (folders[k] || (folders[k] = [])).push(t);
+  });
+  const q = tableSearch.trim().toLowerCase();
+  Object.keys(folders).forEach((k) => {
+    folders[k] = folders[k].filter((t) => !q || t.name.toLowerCase().includes(q) || (t.source_folder || "").toLowerCase().includes(q));
+  });
+
+  const toolDisabled = (id) => {
+    if (id === "merge_tables") return selectedIds.length < 2;
+    if (id === "split_table") return !selectedPaths.length;
+    if (id === "join_row_fragments") return selectedPaths.length < 2;
+    if (id === "move_rows") return !selectedPaths.length;
+    return false;
+  };
+
+  const ctx = {
+    doc, columnPaths: activeMeta?.column_paths, selectedPaths, selectedHeaders, focusedCol,
+    tables, selectedIds, activeId, recipes: session.recipes, recipeDraft,
+    onPreview: onPreview2, onApply, onSaveRecipe: saveRecipe,
+  };
+
+  const nSel = selectedIds.length;
+  const isFlexRow = orientation === "row";
+  const flexDir = isFlexRow ? (swapped ? "row-reverse" : "row") : (swapped ? "column-reverse" : "column");
+  const firstSize = `${splitRatio * 100}%`;
+  const issues = activeMeta?.issues || [];
+  const showChrome = !focusMode;
+
+  return (
+    <div className="h-full flex flex-col bg-[#f3f5f8]">
+      {showChrome && (
+        <header className="h-12 flex-none flex items-center gap-1.5 px-2 bg-white border-b border-slate-200">
+          <button className="btn ghost icon" title="Tables list (⌘B)" onClick={() => setSidebarOpen((v) => !v)}>{I.menu}</button>
+          <span className="text-blue-600">{I.table}</span>
+          <div className="font-semibold text-sm">Table Studio</div>
+          <span className="text-slate-300">|</span>
+          <div className="text-sm text-slate-600 truncate max-w-[180px]" title={session.doc_name}>{session.doc_name}</div>
+          <span className="chip">{tables.length}</span>
+          <span className={"chip " + (activeMeta?.error_count ? "err" : activeMeta?.issue_count ? "warn" : "ok")}>
+            {activeMeta?.issue_count || 0} issues
+          </span>
+          <div className="flex-1" />
+          <button className="btn ghost icon" disabled={!session.can_undo} onClick={undo} title="Undo (⌘Z)">{I.undo}</button>
+          <button className="btn ghost icon" disabled={!session.can_redo} onClick={redo} title="Redo (⇧⌘Z)">{I.redo}</button>
+          <button className="btn ghost icon" onClick={() => setHistoryOpen(true)} title="History">{I.history}</button>
+          <button className="btn ghost" onClick={exportJsonl} title="Export (⌘S)">{I.download}<span className="hidden md:inline">Export</span></button>
+          <span className="sep" />
+          <button className="btn ghost icon" title={isFlexRow ? "Stack image above table" : "Put image beside table"} onClick={() => setOrientation((o) => o === "row" ? "column" : "row")}>{isFlexRow ? I.rows : I.cols}</button>
+          <button className="btn ghost icon" title="Swap image and table" onClick={() => setSwapped((v) => !v)}>{I.swap}</button>
+          <button className="btn ghost icon" title="Focus mode (⇧⌘F)" onClick={() => setFocusMode(true)}>{I.maximize}</button>
+          <button className={"btn ghost icon " + (toolsOpen ? "text-blue-600" : "")} title="Transforms (⌘\\)" onClick={() => setToolsOpen((v) => !v)}>{I.wrench}</button>
+          <button className="btn ghost icon" title="Shortcuts (?)" onClick={() => setHelpOpen(true)}>{I.help}</button>
+        </header>
+      )}
+
+      {focusMode && (
+        <button className="btn ghost fixed top-2 right-2 z-50 bg-white/90 border shadow-sm" onClick={() => setFocusMode(false)} title="Exit focus">
+          {I.minimize}
+        </button>
+      )}
+
+      <div className="flex-1 min-h-0 flex overflow-hidden">
+        {showChrome && sidebarOpen && (
+          <aside className="w-56 flex-none bg-white border-r border-slate-200 flex flex-col">
+            <div className="px-3 py-2 text-xs uppercase tracking-wider text-slate-400 flex items-center justify-between">
+              <span>Tables</span>
+              <div className="flex gap-2 normal-case">
+                <button className="text-blue-600" onClick={() => setSelectedIds(activeId ? [activeId] : [])}>This</button>
+                <button className="text-blue-600" onClick={() => setSelectedIds(tables.map((t) => t.id))}>All</button>
+              </div>
+            </div>
+            <div className="px-2 pb-2">
+              <input className="field" placeholder="Search tables…" value={tableSearch} onChange={(e) => setTableSearch(e.target.value)} />
+            </div>
+            <div className="flex-1 overflow-auto">
+              {Object.entries(folders).map(([folder, items]) => items.length ? (
+                <div key={folder} className="mb-1">
+                  {folder !== "Tables" && <div className="px-3 py-1 text-[11px] text-slate-400 truncate">{folder}</div>}
+                  {items.map((t, i) => (
+                    <label key={t.id} className={"file-item flex items-start gap-2 px-3 py-1.5 text-sm " + (t.id === activeId ? "active" : "hover:bg-slate-50")}
+                      onClick={() => { loadActive(t.id); setPreview(null); setCenterTab("table"); }}>
+                      <input type="checkbox" className="mt-1" checked={selectedIds.includes(t.id)}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => setSelectedIds(e.target.checked ? [...selectedIds, t.id] : selectedIds.filter((x) => x !== t.id))} />
+                      <div className="min-w-0">
+                        <div className="truncate">{String(i + 1).padStart(2, "0")} · {t.name.replace(/\.[^.]+$/, "")}</div>
+                        <div className="text-[11px] text-slate-400">{t.n_body_rows}×{t.n_cols}{selectedIds.includes(t.id) && t.id !== activeId ? " · merge" : ""}</div>
+                      </div>
+                    </label>
+                  ))}
+                </div>
+              ) : null)}
+            </div>
+            <div className="px-3 py-2 border-t border-slate-200 text-[11px] text-slate-500">
+              {nSel} selected{nSel >= 2 ? " · ready to merge" : ""}
+            </div>
+          </aside>
+        )}
+
+        <div ref={paneRef} className="flex-1 min-h-0 min-w-0 flex" style={{ flexDirection: flexDir }}>
+          <div className="min-w-0 min-h-0 flex-none bg-white" style={{ [isFlexRow ? "width" : "height"]: firstSize }}>
+            <ImageViewer src={imageSrc} name={activeMeta?.name} />
+          </div>
+          <div
+            className={"divider " + (isFlexRow ? "" : "vert ") + (dragging ? "dragging" : "")}
+            onMouseDown={() => setDragging(true)}
+            onDoubleClick={() => setSplitRatio(0.38)}
+            title="Drag to resize · double-click to reset"
+          />
+          <div className="flex-1 min-w-0 min-h-0 flex flex-col bg-white">
+            {showChrome && (
+              <div className="flex-none flex items-center px-1 h-10 border-b border-slate-200">
+                {["table", "compare", "source"].map((tab) => (
+                  <button key={tab} className={"tab capitalize " + (centerTab === tab ? "active" : "")}
+                    onClick={() => setCenterTab(tab)}>{tab === "source" ? "JSON" : tab}</button>
+                ))}
+                <div className="flex-1" />
+                {busy && <span className="text-xs text-slate-400 pr-2">Working…</span>}
+              </div>
+            )}
+
+            {centerTab === "table" && (
+              <>
+                {showChrome && (
+                  <div className="flex-none flex flex-wrap items-center gap-1 px-2 py-1.5 border-b border-slate-200 bg-slate-50">
+                    <button className="btn ghost" onClick={() => rowOp("add_row")} title="Add row">{I.plus}<span className="hidden lg:inline">Row</span></button>
+                    <button className="btn ghost" disabled={!selectedPaths.length} onClick={() => rowOp("add_child")} title="Add child">{I.child}<span className="hidden lg:inline">Child</span></button>
+                    <button className="btn ghost icon" disabled={!selectedPaths.length} onClick={() => rowOp("duplicate")} title="Duplicate">{I.copy}</button>
+                    <button className="btn ghost icon" disabled={!canIndent} onClick={() => rowOp("indent")} title="Indent (⌥→)">{I.indent}</button>
+                    <button className="btn ghost icon" disabled={!canOutdent} onClick={() => rowOp("outdent")} title="Outdent (⌥←)">{I.outdent}</button>
+                    <button className="btn ghost icon" disabled={!selectedPaths.length} onClick={() => rowOp("up")} title="Move up (⌥↑)">{I.up}</button>
+                    <button className="btn ghost icon" disabled={!selectedPaths.length} onClick={() => rowOp("down")} title="Move down (⌥↓)">{I.down}</button>
+                    <button className="btn ghost icon danger" disabled={!selectedPaths.length} onClick={() => rowOp("delete")} title="Delete (⌘⌫)">{I.trash}</button>
+                    <span className="sep" />
+                    <button className="btn ghost" onClick={() => colOp("add")} title="Insert column after focused cell">{I.plus}Col</button>
+                    <button className="btn ghost danger" disabled={tableWidth(doc) <= 1} onClick={() => colOp("del")} title="Remove focused column">Col{I.trash}</button>
+                    <span className="sep" />
+                    <button className="btn ghost" onClick={() => quickTransfer("to_body")} title="Copy headers into body">H→B</button>
+                    <button className="btn ghost" disabled={!selectedPaths.length} onClick={() => quickTransfer("to_headers")} title="Copy selected rows into headers">B→H</button>
+                    <button className="btn ghost" onClick={() => { openTool("remove_repeated_headers"); onPreview2("remove_repeated_headers", {}, "Removed repeated headers"); }} title="Remove repeated header rows from body">Repeat</button>
+                    <button className="btn ghost" onClick={() => onApply("normalize_width", { width: tableWidth(doc) }, "Normalized width")} title="Pad short rows">Width</button>
+                    <span className="text-[11px] text-slate-400 ml-auto">
+                      {flatBody.length} rows · {activeMeta?.n_cols || 0} cols
+                      {selectedPaths.length ? ` · ${selectedPaths.length} selected` : ""}
+                      {focusedCol != null ? ` · col ${focusedCol}` : ""}
+                    </span>
+                  </div>
+                )}
+                <div className="flex-1 min-h-0">
+                  {doc && (
+                    <BodyGrid
+                      key={activeId}
+                      doc={doc}
+                      columnPaths={activeMeta?.column_paths}
+                      gridApiRef={gridApiRef}
+                      onSelect={setSelectedPaths}
+                      onFocusCol={setFocusedCol}
+                      onEdit={onEditCell}
+                    />
+                  )}
+                </div>
+                <div className="flex-none border-t border-slate-200">
+                  <div className="px-3 py-1 flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2">
+                      <button className="btn ghost icon" style={{ padding: "2px 6px" }} onClick={() => setHeadersCollapsed((v) => !v)} title={headersCollapsed ? "Show headers" : "Hide headers"}>
+                        {headersCollapsed ? "▶" : "▼"}
+                      </button>
+                      <span className="uppercase tracking-wider text-slate-400">Headers</span>
+                      <span className="chip">{doc?.headers?.length || 0}</span>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button className="btn ghost" onClick={() => onApply("set_headers", { headers: [...(doc?.headers || []), Array(Math.max(1, tableWidth(doc))).fill("")] }, "Added header row")}>{I.plus}Row</button>
+                      <button className="btn ghost danger" disabled={!selectedHeaders.length} onClick={() => onApply("set_headers", { headers: (doc?.headers || []).filter((_, i) => !selectedHeaders.includes(i)) }, "Removed header row")}>{I.trash}</button>
+                    </div>
+                  </div>
+                  {!headersCollapsed && (
+                    <div style={{ height: 132 }}>
+                      <HeadersGrid
+                        key={"h-" + activeId + "-" + (doc?.headers || []).length}
+                        headers={doc?.headers || []}
+                        width={Math.max(1, tableWidth(doc), activeMeta?.n_cols || 0)}
+                        selected={selectedHeaders}
+                        onSelect={setSelectedHeaders}
+                        onEdit={onEditCell}
+                        gridApiRef={headersApiRef}
+                      />
+                    </div>
+                  )}
+                </div>
+                {showChrome && issues.length > 0 && (
+                  <div className="flex-none max-h-20 overflow-auto border-t border-slate-200 text-xs">
+                    {issues.slice(0, 8).map((iss, i) => (
+                      <div key={i} className={"px-3 py-1 " + (iss.code === "inconsistent_width" ? "text-amber-700" : "text-red-600")}>
+                        {iss.message}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+
+            {centerTab === "compare" && (
+              <div className="flex-1 overflow-auto p-3 grid md:grid-cols-2 gap-3">
+                <MiniTable doc={doc} title="Before" columnPaths={activeMeta?.column_paths} />
+                <MiniTable doc={preview?.preview_table || doc} title={preview ? "After (preview)" : "After — run a bulk tool"} columnPaths={preview?.column_paths || activeMeta?.column_paths} />
+              </div>
+            )}
+
+            {centerTab === "source" && (
+              <pre className="flex-1 overflow-auto p-4 text-[11px] leading-relaxed text-slate-700 bg-slate-50">{JSON.stringify(doc, null, 2)}</pre>
+            )}
+
+            {(preview || error) && (
+              <div className={"flex-none px-3 py-2 text-sm flex items-start gap-2 border-t " + (error ? "bg-red-50 text-red-700 border-red-100" : "bg-emerald-50 text-emerald-800 border-emerald-100")}>
+                {error ? I.alert : I.check}
+                <div className="flex-1 min-w-0">
+                  {error ? error : (preview?.preview ? `Preview only — ${preview.label || preview.op}. Nothing is applied until you confirm.` : "")}
+                  {preview?.issues?.length ? <div className="text-xs mt-1 opacity-80">{preview.issues.length} validation note(s) on the result</div> : null}
+                </div>
+                {preview && !error && (
+                  <div className="flex gap-2">
+                    <button className="btn ghost" onClick={() => { setPreview(null); setCenterTab("table"); }}>Cancel</button>
+                    <button className="btn primary" onClick={confirmPreview2}>Apply changes</button>
+                  </div>
+                )}
+                {error && <button className="btn ghost" onClick={() => setError("")}>{I.x}</button>}
+              </div>
+            )}
+
+            {showChrome && (
+              <div className="flex-none h-7 px-3 border-t border-slate-200 bg-slate-50 text-[11px] text-slate-500 flex items-center gap-3 overflow-hidden">
+                <span>Click a cell, then use arrows</span>
+                <span className="kbd">Enter</span><span>next row</span>
+                <span className="kbd">Tab</span><span>next col</span>
+                <span className="kbd">⌘Z</span><span>undo</span>
+                <span className="hidden md:inline kbd">⌥→</span><span className="hidden md:inline">indent</span>
+                <span className="hidden lg:inline kbd">?</span><span className="hidden lg:inline">all shortcuts</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {showChrome && toolsOpen && (
+          <aside className="w-72 flex-none bg-white border-l border-slate-200 flex flex-col">
+            <div className="px-3 py-2 text-xs uppercase tracking-wider text-slate-400 flex items-center justify-between">
+              <span>Transforms</span>
+              <button className="btn ghost icon" style={{ padding: 4 }} onClick={() => setToolsOpen(false)}>{I.x}</button>
+            </div>
+            <div className="flex-1 overflow-auto px-2 pb-3">
+              {TOOLS.map((g) => (
+                <div key={g.group} className="mb-2">
+                  <div className="px-2 py-1 text-[11px] font-medium text-slate-400">{g.group}</div>
+                  {g.items.map((item) => (
+                    <button key={item.id} className={"tool-btn " + (tool === item.id ? "active" : "")}
+                      disabled={toolDisabled(item.id)}
+                      title={toolDisabled(item.id) ? "Selection cannot satisfy this operation" : item.label}
+                      onClick={() => setTool(item.id)}>
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              ))}
+              {tool && (
+                <div className="mt-2 p-3 rounded-xl border border-slate-200 bg-slate-50">
+                  <div className="text-sm font-medium mb-2">{TOOLS.flatMap((g) => g.items).find((t) => t.id === tool)?.label}</div>
+                  <TransformForm tool={tool} ctx={ctx} />
+                </div>
+              )}
+            </div>
+          </aside>
+        )}
+        {showChrome && !toolsOpen && (
+          <aside className="w-11 flex-none bg-white border-l border-slate-200 flex flex-col items-center py-2 gap-1">
+            <button className="rail-btn" title="Open transforms" onClick={() => setToolsOpen(true)}>{I.wrench}</button>
+            <button className={"rail-btn " + (tool === "merge_tables" ? "active" : "")} title="Merge tables" disabled={nSel < 2} onClick={() => openTool("merge_tables")}>{I.rows}</button>
+            <button className={"rail-btn " + (tool === "map_columns" ? "active" : "")} title="Map columns" onClick={() => openTool("map_columns")}>{I.cols}</button>
+            <button className={"rail-btn " + (tool === "split_table" ? "active" : "")} title="Split table" onClick={() => openTool("split_table")}>{I.swap}</button>
+          </aside>
+        )}
+      </div>
+
+      {historyOpen && (
+        <div className="fixed inset-0 z-40 flex justify-end bg-black/20" onClick={() => setHistoryOpen(false)}>
+          <div className="w-96 max-w-full h-full bg-white shadow-xl p-4 overflow-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="font-semibold">History</div>
+              <button className="btn ghost" onClick={() => setHistoryOpen(false)}>{I.x}</button>
+            </div>
+            {(session.log || []).length === 0 && <div className="text-sm text-slate-500">No operations yet. Cell edits and toolbar actions appear here.</div>}
+            {[...(session.log || [])].reverse().map((item, i) => (
+              <div key={i} className="border border-slate-200 rounded-xl p-3 mb-2">
+                <div className="text-sm font-medium">{item.label || item.op}</div>
+                <div className="text-[11px] text-slate-400 mt-1">{item.op} · {(item.table_ids || []).length} table(s)</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {helpOpen && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/30 p-4" onClick={() => setHelpOpen(false)}>
+          <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full p-5" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-3">
+              <div className="font-semibold">Keyboard</div>
+              <button className="btn ghost icon" onClick={() => setHelpOpen(false)}>{I.x}</button>
+            </div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+              {[
+                ["⌘Z / ⇧⌘Z", "Undo / redo"],
+                ["⌘S", "Export JSONL"],
+                ["⌘B", "Tables sidebar"],
+                ["⌘\\", "Transforms panel"],
+                ["⇧⌘F", "Focus mode"],
+                ["⌘⌫", "Delete selected rows"],
+                ["Arrows", "Move between cells"],
+                ["Tab / Enter", "Next column / row"],
+                ["⌥ ← →", "Outdent / indent"],
+                ["⌥ ↑ ↓", "Move row among siblings"],
+                ["Esc", "Cancel preview"],
+                ["?", "This list"],
+              ].map(([k, v]) => (
+                <div key={k} className="flex items-center justify-between gap-3 py-1 border-b border-slate-100">
+                  <span className="kbd whitespace-nowrap">{k}</span>
+                  <span className="text-slate-600 text-xs">{v}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-slate-500 mt-3">Drag the divider between the image and the grid to resize. Double-click it to reset. Merge, map, split, and recipes stay in the transforms panel so they preview before they apply.</p>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+  </script>
+</body>
+</html>
