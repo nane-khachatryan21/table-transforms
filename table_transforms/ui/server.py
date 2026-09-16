@@ -1,4 +1,4 @@
-"""Minimal stdlib HTTP server for the Table Studio demo.
+"""Stdlib HTTP server for Table Studio.
 
 Every mutating action is a table_transforms call. Session state lives in memory.
 """
@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
@@ -402,8 +402,6 @@ def preview_or_apply(payload: dict, commit: bool) -> dict[str, Any]:
             "args": copy.deepcopy(args),
         }
     )
-    if op not in ("merge_tables", "split_table") and op in SINGLE_TABLE_OPS:
-        pass
     return {
         "ok": True,
         "preview": False,

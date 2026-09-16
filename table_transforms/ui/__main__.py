@@ -1,4 +1,4 @@
-"""python -m table_studio"""
+"""python -m table_transforms.ui  →  Table Studio UI"""
 
 from .server import main
 

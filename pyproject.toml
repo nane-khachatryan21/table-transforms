@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "table-transforms"
+version = "0.1.0"
+description = "Deterministic transforms for hierarchical table JSON, with a local Table Studio UI."
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [{ name = "Nane Khachatryan" }]
+keywords = ["tables", "json", "transforms", "hierarchical"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Text Processing",
+    "Typing :: Typed",
+]
+
+[project.urls]
+Homepage = "https://github.com/nane-khachatryan21/table-transforms"
+
+[project.scripts]
+table-studio = "table_transforms.ui.server:main"
+
+[tool.setuptools.packages.find]
+include = ["table_transforms*"]
+
+[tool.setuptools.package-data]
+table_transforms = ["py.typed"]
+"table_transforms.ui" = ["static/*"]

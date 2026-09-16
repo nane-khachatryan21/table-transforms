@@ -103,6 +103,41 @@ const clone = (v) => JSON.parse(JSON.stringify(v));
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 const basename = (p) => String(p || "").split(/[\\/]/).pop();
 const pathKey = (p) => (p || []).join(".");
+const mergedImageKey = (tableId) => `__merged__${tableId}`;
+const imageUrlForKey = (images, key) => (key ? (images[key] || images[basename(key)]) : null);
+const stripMergedImages = (images) => {
+  const next = { ...images };
+  Object.keys(next).forEach((k) => { if (k.startsWith("__merged__")) delete next[k]; });
+  return next;
+};
+function concatImagesVertically(urls) {
+  return Promise.all(urls.map((url) => new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error("image load failed"));
+    img.src = url;
+  }))).then((imgs) => {
+    const width = Math.max(...imgs.map((img) => img.naturalWidth));
+    const height = imgs.reduce((sum, img) => sum + img.naturalHeight, 0);
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, width, height);
+    let y = 0;
+    for (const img of imgs) {
+      ctx.drawImage(img, Math.floor((width - img.naturalWidth) / 2), y);
+      y += img.naturalHeight;
+    }
+    return new Promise((resolve, reject) => {
+      canvas.toBlob((blob) => {
+        if (!blob) { reject(new Error("image encode failed")); return; }
+        resolve(URL.createObjectURL(blob));
+      }, "image/png");
+    });
+  });
+}
 const emptyRow = (w) => ({ row_data: Array(Math.max(1, w)).fill(""), children: [] });
 const lsGet = (k, d) => { try { const v = localStorage.getItem(k); return v == null ? d : v; } catch { return d; } };
 const lsSet = (k, v) => { try { localStorage.setItem(k, String(v)); } catch {} };
@@ -1033,6 +1068,7 @@ function TransformForm({ tool, ctx }) {
 function App() {
   const [session, setSession] = useState(null);
   const [images, setImages] = useState({});
+  const [compositePreview, setCompositePreview] = useState(null);
   const [activeId, setActiveId] = useState(null);
   const [selectedIds, setSelectedIds] = useState([]);
   const [selectedPaths, setSelectedPaths] = useState([]);
@@ -1088,7 +1124,33 @@ function App() {
   const tables = session?.tables || [];
   const activeMeta = tables.find((t) => t.id === activeId) || tables[0];
   const doc = session?.active;
-  const imageSrc = activeMeta ? (images[activeMeta.image_key] || images[basename(activeMeta.image_key)]) : null;
+  const imageSrc = compositePreview || (activeMeta
+    ? (images[mergedImageKey(activeMeta.id)] || imageUrlForKey(images, activeMeta.image_key))
+    : null);
+
+  const mergeImageUrls = (tableIds) => (tableIds || [])
+    .map((tid) => {
+      const meta = tables.find((t) => t.id === tid);
+      return meta ? (images[mergedImageKey(meta.id)] || imageUrlForKey(images, meta.image_key)) : null;
+    })
+    .filter(Boolean);
+
+  useEffect(() => {
+    if (preview?.op !== "merge_tables" || !preview.table_ids?.length) {
+      setCompositePreview(null);
+      return;
+    }
+    const urls = mergeImageUrls(preview.table_ids);
+    if (urls.length < 2) {
+      setCompositePreview(null);
+      return;
+    }
+    let cancelled = false;
+    concatImagesVertically(urls)
+      .then((url) => { if (!cancelled) setCompositePreview(url); })
+      .catch(() => { if (!cancelled) setCompositePreview(null); });
+    return () => { cancelled = true; };
+  }, [preview, tables, images]);
   const flatBody = flattenBody(doc?.body || []);
   const canIndent = selectedPaths.length === 1 && !!previousSibling(flatBody, selectedPaths[0]);
   const canOutdent = selectedPaths.length === 1 && selectedPaths[0].length >= 2;
@@ -1125,13 +1187,25 @@ function App() {
         setCenterTab("compare");
       } else {
         setPreview(null);
+        setCompositePreview(null);
         if (RECIPE_OPS.has(op)) setRecipeDraft((d) => [...d, { op, ...(args || {}) }]);
+        if (op === "merge_tables" && table_ids.length >= 2) {
+          const keepId = table_ids[0];
+          const urls = mergeImageUrls(table_ids);
+          if (urls.length >= 2) {
+            try {
+              const composite = await concatImagesVertically(urls);
+              setImages((prev) => ({ ...prev, [mergedImageKey(keepId)]: composite }));
+            } catch {}
+          }
+        }
         refreshFrom(data.state);
         if (data.state) setActiveId(data.state.active_id);
       }
     } catch (e) {
       setError(e.message);
       setPreview(null);
+      setCompositePreview(null);
     } finally { setBusy(false); }
   };
 
@@ -1215,8 +1289,24 @@ function App() {
     onPreview2("transfer_header_rows", { direction, mode: "copy", rows, index: 0 }, "Transferred header rows");
   };
 
-  const undo = async () => { try { const d = await api("/api/undo", {}); refreshFrom(d.state); setPreview(null); } catch (e) { setError(e.message); } };
-  const redo = async () => { try { const d = await api("/api/redo", {}); refreshFrom(d.state); setPreview(null); } catch (e) { setError(e.message); } };
+  const undo = async () => {
+    try {
+      const d = await api("/api/undo", {});
+      setImages(stripMergedImages);
+      setCompositePreview(null);
+      refreshFrom(d.state);
+      setPreview(null);
+    } catch (e) { setError(e.message); }
+  };
+  const redo = async () => {
+    try {
+      const d = await api("/api/redo", {});
+      setImages(stripMergedImages);
+      setCompositePreview(null);
+      refreshFrom(d.state);
+      setPreview(null);
+    } catch (e) { setError(e.message); }
+  };
   const exportJsonl = async () => {
     try {
       const res = await api("/api/export.jsonl");
@@ -1400,16 +1490,29 @@ function App() {
                 <div key={folder} className="mb-1">
                   {folder !== "Tables" && <div className="px-3 py-1 text-[11px] text-slate-400 truncate">{folder}</div>}
                   {items.map((t, i) => (
-                    <label key={t.id} className={"file-item flex items-start gap-2 px-3 py-1.5 text-sm " + (t.id === activeId ? "active" : "hover:bg-slate-50")}
-                      onClick={() => { loadActive(t.id); setPreview(null); setCenterTab("table"); }}>
-                      <input type="checkbox" className="mt-1" checked={selectedIds.includes(t.id)}
+                    <div key={t.id} role="button" tabIndex={0}
+                      className={"file-item flex items-start gap-2 px-3 py-1.5 text-sm cursor-pointer " + (t.id === activeId ? "active" : "hover:bg-slate-50")}
+                      onClick={() => { loadActive(t.id); setPreview(null); setCenterTab("table"); }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          loadActive(t.id);
+                          setPreview(null);
+                          setCenterTab("table");
+                        }
+                      }}>
+                      <input type="checkbox" className="mt-1 shrink-0 cursor-pointer" checked={selectedIds.includes(t.id)}
+                        onMouseDown={(e) => e.stopPropagation()}
                         onClick={(e) => e.stopPropagation()}
-                        onChange={(e) => setSelectedIds(e.target.checked ? [...selectedIds, t.id] : selectedIds.filter((x) => x !== t.id))} />
-                      <div className="min-w-0">
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          setSelectedIds(e.target.checked ? [...selectedIds, t.id] : selectedIds.filter((x) => x !== t.id));
+                        }} />
+                      <div className="min-w-0 flex-1">
                         <div className="truncate">{String(i + 1).padStart(2, "0")} · {t.name.replace(/\.[^.]+$/, "")}</div>
                         <div className="text-[11px] text-slate-400">{t.n_body_rows}×{t.n_cols}{selectedIds.includes(t.id) && t.id !== activeId ? " · merge" : ""}</div>
                       </div>
-                    </label>
+                    </div>
                   ))}
                 </div>
               ) : null)}
